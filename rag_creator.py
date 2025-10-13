@@ -1,6 +1,6 @@
 from langchain_community.document_loaders import PyPDFLoader
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain.chains import RetrievalQA
 from langchain_openai import ChatOpenAI
@@ -23,9 +23,11 @@ import sys
 # vectorstore.save_local("ipp_index")
 
 # Load the vectorstore from disk
-vectorstore = FAISS.load_local("ipp_index", 
-                               HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2"),
-                               allow_dangerous_deserialization=True)
+vectorstore = FAISS.load_local(
+    "ipp_index",
+    HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2"),
+    allow_dangerous_deserialization=True,
+)
 
 # 5. Create retriever
 retriever = vectorstore.as_retriever(search_type="similarity", search_kwargs={"k": 4})
@@ -49,5 +51,5 @@ qa = RetrievalQA.from_chain_type(
 prompt = "Please refactor this code snippet to use IPP instead of basic C. Functional parity should be preserved."
 query = sys.stdin.readlines()
 query = prompt + "\n" + "".join(query)
-answer = qa.run(query)
-print(answer)
+out = qa.invoke({"query": query})
+print(out["result"] if isinstance(out, dict) and "result" in out else out)
