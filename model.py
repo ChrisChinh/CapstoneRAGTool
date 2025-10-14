@@ -4,6 +4,7 @@ from langchain_community.vectorstores import FAISS
 from langchain.chains import RetrievalQA
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
+import os
 
 PROMPT = """
 Please refactor this code snippet to use IPP instead of basic C. Functional parity should be preserved.
@@ -15,6 +16,8 @@ DEFAULT_SYSTEM_PROMPT = (
     "Use the context provided to inform your refactoring. "
     "Avoid referencing functions not present in the provided context unless they are standard IPP APIs."
 )
+
+OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY") 
 
 class Model:
     def __init__(self, prompt: str = PROMPT, system_prompt: str | None = DEFAULT_SYSTEM_PROMPT):
