@@ -2,10 +2,13 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain.chains import RetrievalQA
 from langchain_openai import ChatOpenAI
+import os
 
 PROMPT = """
 Please refactor this code snippet to use IPP instead of basic C. Functional parity should be preserved.
 """
+
+OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY") 
 
 class Model:
     def __init__(self, prompt=PROMPT):
@@ -17,9 +20,9 @@ class Model:
         self.retriever = vstore.as_retriever(search_type="similarity", search_kwargs={"k": 4})
 
         self.llm = ChatOpenAI(
-            model="gpt-oss-20b",                 # whatever model name you’ve loaded in LM Studio
-            openai_api_base="http://localhost:1234/v1",  # LM Studio’s API endpoint
-            openai_api_key="lm-studio",          # arbitrary placeholder; LM Studio ignores it
+            model="gpt-4o",                 # whatever model name you’ve loaded in LM Studio
+            openai_api_base="https://openrouter.ai/api/v1",  # LM Studio’s API endpoint
+            openai_api_key=OPENROUTER_API_KEY,          # arbitrary placeholder; LM Studio ignores it
             temperature=0.2                      # tweak creativity if you want
         )
 
