@@ -9,6 +9,8 @@ Please refactor this code snippet to use IPP instead of basic C. Functional pari
 """
 
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY") 
+#Linux -> export OPENROUTER_API_KEY="apikey"
+#WIndows -> $env or set OPENROUTER_API_KEY="apikey"
 
 class Model:
     def __init__(self, prompt=PROMPT):
