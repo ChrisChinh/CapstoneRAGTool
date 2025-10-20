@@ -1,1 +1,5 @@
+<<<<<<< HEAD
 __pycache__/*
+=======
+*.pyc
+>>>>>>> b5d7242 (Ignore annoying python compile files)
