@@ -126,7 +126,61 @@ class GUI(Tk):
 
     # ------------------------- Button Actions -------------------------
     def on_settings(self):
-        messagebox.showinfo("Settings", "Settings dialog placeholder.")
+        # One-time system prompt dialog (no persistence)
+        dlg = Toplevel(self)
+        dlg.title("System Prompt")
+        dlg.geometry("700x450")
+        dlg.transient(self)
+        dlg.grab_set()
+
+        # Container
+        container = Frame(dlg, padx=12, pady=12)
+        container.pack(fill=BOTH, expand=True)
+
+        Label(container, text="System prompt (applies to this session only):", font=("Arial", 11, "bold")).pack(anchor=W)
+
+        # Text area with scrollbar
+        text_frame = Frame(container)
+        text_frame.pack(fill=BOTH, expand=True, pady=(6, 10))
+
+        scrollbar = Scrollbar(text_frame)
+        scrollbar.pack(side=RIGHT, fill=Y)
+
+        sys_text = Text(text_frame, wrap=WORD, font=("Consolas", 11), yscrollcommand=scrollbar.set)
+        sys_text.pack(side=LEFT, fill=BOTH, expand=True)
+        scrollbar.config(command=sys_text.yview)
+
+        # Prefill with current system prompt if available
+        try:
+            current = getattr(self.model, "system_prompt", "") or ""
+        except Exception:
+            current = ""
+        if current:
+            sys_text.insert("1.0", current)
+
+        # Buttons
+        btns = Frame(container)
+        btns.pack(anchor=E)
+
+        def apply_and_close():
+            new_prompt = sys_text.get("1.0", END).strip()
+            try:
+                # Allow clearing to fall back to default; treat empty as None
+                self.model.set_system_prompt(new_prompt)
+                self.model_status_lb.config(text="Model Status: System prompt set")
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to set system prompt:\n{e}")
+                return
+            finally:
+                dlg.grab_release()
+            dlg.destroy()
+
+        def cancel():
+            dlg.grab_release()
+            dlg.destroy()
+
+        Button(btns, text="Cancel", command=cancel, width=10).pack(side=RIGHT, padx=(8, 0))
+        Button(btns, text="Apply", command=apply_and_close, width=12).pack(side=RIGHT)
 
     def on_run(self):
         # Toplevel placeholder
