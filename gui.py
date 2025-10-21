@@ -208,20 +208,12 @@ class GUI(Tk):
 
     def on_load_data(self):
         path = filedialog.askopenfilename(title="Load Data", filetypes=[
-            ("Text files", "*.txt"),
-            ("Markdown", "*.md"),
-            ("All files", "*.*"),
+            ("PDF Files", "*.pdf"),
         ])
         if not path:
             return
-        try:
-            with open(path, "r", encoding="utf-8") as f:
-                data = f.read()
-            self.input_text.delete("1.0", END)
-            self.input_text.insert("1.0", data)
-            self.model_status_lb.config(text=f"Model Status: Loaded '{path.split('/')[-1]}'")
-        except Exception as e:
-            messagebox.showerror("Load Error", f"Failed to load file:\n{e}")
+        self.model.add_pdf_to_rag(path)
+        messagebox.showinfo("Load Data", f"Loaded data from:\n{path}. Please restart the application to ensure changes take effect.")
 
 
 if __name__ == "__main__":

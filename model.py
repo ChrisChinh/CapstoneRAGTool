@@ -113,3 +113,35 @@ class Model:
             chain_type_kwargs={"prompt": chat_prompt},
         )
 
+    def add_pdf_to_rag(self, pdf_path: str) -> None:
+        """Add a PDF document to the RAG vector store."""
+        from langchain.document_loaders import PyPDFLoader
+        from langchain.text_splitter import RecursiveCharacterTextSplitter
+        from langchain_community.vectorstores import FAISS
+
+        # Load and split the PDF document
+        loader = PyPDFLoader(pdf_path)
+        documents = loader.load()
+
+        text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+        docs = text_splitter.split_documents(documents)
+
+        # Create embeddings for the new documents
+        new_embeddings = self.embeddings.embed_documents([doc.page_content for doc in docs])
+
+        # Load existing FAISS index
+        vstore = FAISS.load_local(
+            "ipp_index",
+            self.embeddings,
+            allow_dangerous_deserialization=True,
+        )
+
+        # Add new documents and their embeddings to the vector store
+        vstore.add_texts(
+            [doc.page_content for doc in docs],
+            new_embeddings,
+        )
+
+        # Save the updated index back to disk
+        vstore.save_local("ipp_index")
+
