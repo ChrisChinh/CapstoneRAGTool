@@ -291,9 +291,16 @@ class GUI(Tk):
         def run_model():
             try:
                 answer = self.model.run(text)
+                # Success path: Execute _apply_markdown_tags on the main thread
                 self.after(0, lambda: self._apply_markdown_tags(self.output_text, answer))
+            
             except Exception as e:
-                self.after(0, lambda: self.output_text.insert("1.0", f"Error during model run: {e}"))
+                # --- FIX APPLIED HERE ---
+                # Pass the exception 'e' as a default argument 'err' to the lambda.
+                # This binds the current value of 'e' immediately.
+                self.after(0, lambda err=e: self.output_text.insert("1.0", f"Error during model run: {err}"))
+                # --- END FIX ---
+            
             finally:
                 self.after(0, tl.destroy)
 

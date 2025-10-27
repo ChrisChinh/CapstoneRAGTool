@@ -1,10 +1,3 @@
-<<<<<<< HEAD
-<<<<<<< HEAD
-__pycache__/*
-=======
-*.pyc
->>>>>>> b5d7242 (Ignore annoying python compile files)
-=======
 *.pyc
 __pycache__/*
->>>>>>> 0201f23 (stuff)
+.env
