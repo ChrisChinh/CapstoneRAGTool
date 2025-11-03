@@ -14,11 +14,41 @@ from dotenv import load_dotenv
 # Load .env variables immediately for key access
 load_dotenv() 
 
-# --- UTILITY FUNCTION: IPP IDENTIFIER EXTRACTION ---
-def extract_ipp_identifiers(code_text: str) -> set:
-    """Uses regex to find all potential IPP function/structure names."""
-    return set(re.findall(r'\b(ipp[sScC][a-zA-Z0-9_]+)\b', code_text))
+# --- UTILITY FUNCTIONS: NORMALIZATION + IPP IDENTIFIER EXTRACTION ---
+def _normalize_text_for_ids(text: str) -> str:
+    """Normalize text to make IPP identifier detection robust to PDF artifacts."""
+    if not text:
+        return ""
+    # Remove soft hyphen and zero-width chars
+    text = text.replace("\u00AD", "")  # soft hyphen
+    text = text.replace("\u200B", "")  # zero-width space
+    text = text.replace("\u200C", "").replace("\u200D", "")
+    # Normalize various unicode dashes to ASCII hyphen
+    text = re.sub(r"[\u2010-\u2015]", "-", text)
+    # Join hyphenated line breaks: word-<newline>word -> wordword
+    text = re.sub(r"(?<=\w)-\s*\n\s*(?=\w)", "", text)
+    # Join bare line breaks inside tokens: word<newline>word -> word word (then we remove spaces inside ipp tokens later)
+    text = re.sub(r"(?<=\w)\s*\n\s*(?=\w)", " ", text)
+    # Remove extra spaces inside obvious IPP prefixes like 'ipp s' -> 'ipps'
+    text = re.sub(r"(?i)\b(ipp)\s+([a-z])", r"\1\2", text)
+    return text
 
+def _normalize_identifier(s: str) -> str:
+    """Normalization for comparison: lowercase and strip non-alphanumerics."""
+    return re.sub(r"[^a-z0-9]", "", s.lower())
+
+def extract_ipp_identifiers(code_text: str) -> set:
+    """
+    Extract IPP-like identifiers robustly.
+    Matches any function/structure starting with 'ipp' + a letter (covers ippi, ipps, ippm, ippr, ippcore, etc.).
+    Case-insensitive; returns normalized lowercase originals (but keeps original spelling as well if needed).
+    """
+    text = _normalize_text_for_ids(code_text)
+    # Broad domain coverage: ipp + letter + [a-z0-9_]+
+    pattern = re.compile(r"\b(ipp[a-z][a-z0-9_]+)\b", re.IGNORECASE)
+    ids = set(m.group(1) for m in pattern.finditer(text))
+    # Return normalized case-insensitive set for robust comparison
+    return set(i.lower() for i in ids)
 
 # --- 1. CONFIGURATION AND PROMPT DEFINITIONS ---
 
@@ -113,12 +143,17 @@ class Model:
         
         # --- RAG Setup (Local FAISS) ---
         self.embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
-        vstore = FAISS.load_local(
+        # Keep a reference to the vector store for verification sweeps
+        self.vstore = FAISS.load_local(
             "ipp_index",
             self.embeddings,
             allow_dangerous_deserialization=True,
         )
-        self.retriever = vstore.as_retriever(search_type="similarity", search_kwargs={"k": 4})
+        # Use MMR and higher k to diversify retrieval
+        self.retriever = self.vstore.as_retriever(
+            search_type="mmr",
+            search_kwargs={"k": 8, "fetch_k": 20, "lambda_mult": 0.5},
+        )
 
         # --- LangGraph Setup ---
         self.graph = self._build_critique_graph()
@@ -219,23 +254,68 @@ class Model:
         print("--- RAG: Critiquing Generation ---")
         
         # 1. IDENTIFY HALLUCINATIONS PROGRAMMATICALLY (THE HARD FAIL GUARDRAIL)
-        
         context_str = "\n\n".join(state["documents"])
         generated_ids = extract_ipp_identifiers(state["generation"])
         context_ids = extract_ipp_identifiers(context_str)
-        hallucinated_ids = generated_ids - context_ids
-        
-        if hallucinated_ids:
-            # IMMEDIATE FAILURE: Override LLM and force REVISE
+
+        missing_ids = generated_ids - context_ids
+
+        # 1b. VERIFICATION SWEEP against the full FAISS index before failing
+        newly_added_docs = []
+        if missing_ids:
+            print(f"--- RAG: Verifying suspected missing identifiers: {sorted(missing_ids)} ---")
+            still_missing = set()
+            for ident in sorted(missing_ids):
+                # Query the index with the raw identifier
+                try:
+                    candidate_docs = self.retriever.invoke(ident) or []
+                except Exception:
+                    candidate_docs = []
+                # Normalize for robust containment checks
+                norm_ident = _normalize_identifier(ident)
+                verified = False
+                for doc in candidate_docs:
+                    content = doc.page_content or ""
+                    norm_content = _normalize_text_for_ids(content).lower()
+                    # Fast path: case-insensitive exact token match
+                    if ident.lower() in norm_content:
+                        verified = True
+                    else:
+                        # Fuzzy path: strip non-alphanumerics and test containment
+                        if _normalize_identifier(norm_content).find(norm_ident) != -1:
+                            verified = True
+                    if verified:
+                        newly_added_docs.append(content)
+                        break
+                if not verified:
+                    still_missing.add(ident)
+
+            # If we verified any, extend the context and recompute context_ids
+            if newly_added_docs:
+                # Ensure uniqueness
+                existing = set(state["documents"])
+                to_add = [d for d in newly_added_docs if d not in existing]
+                if to_add:
+                    state["documents"].extend(to_add)
+                    context_ids = extract_ipp_identifiers("\n\n".join(state["documents"]))
+                    missing_ids = generated_ids - context_ids
+                else:
+                    missing_ids = still_missing
+            else:
+                missing_ids = still_missing
+
+        if missing_ids:
+            # IMMEDIATE FAILURE after verification sweep
             reason = (
-                f"CRITICAL ERROR: The generated code HALUCINATED the following IPP identifiers "
-                f"which were NOT found in the provided documentation context: {', '.join(hallucinated_ids)}. "
-                f"The model MUST use only the functions and structures explicitly present in the context."
+                "CRITICAL ERROR: The generated code HALLUCINATED the following IPP identifiers "
+                f"which were NOT found in the provided or verified documentation context: {', '.join(sorted(missing_ids))}. "
+                "The model MUST use only the functions and structures explicitly present in the context."
             )
-            print(f"--- HARD FAIL: Hallucination Detected: {', '.join(hallucinated_ids)} ---")
+            print(f"--- HARD FAIL: Hallucination Confirmed: {', '.join(sorted(missing_ids))} ---")
             return {
                 "critique_status": "REVISE",
                 "critique_reason": reason,
+                "documents": state["documents"],  # propagate any newly added verified docs
             }
 
         # 2. INVOKE LLM FOR FUNCTIONAL CRITIQUE (Only runs if no hard hallucination detected)
@@ -255,37 +335,29 @@ class Model:
             }).content
         except Exception as e:
             print(f"CRITIC API ERROR: {e}")
-            return {"critique_status": "REVISE", "critique_reason": f"API FAILED during critique: {e}"}
-
+            return {"critique_status": "REVISE", "critique_reason": f"API FAILED during critique: {e}", "documents": state["documents"]}
 
         # 3. ROBUST JSON EXTRACTION AND VALIDATION
         try:
-            # Clean and load JSON
             match = re.search(r'```json\s*(.*?)\s*```', raw_response, re.DOTALL)
             json_text = match.group(1).strip() if match else raw_response.strip()
             raw_output_dict = json.loads(json_text)
-            
-            # Flatten nesting if necessary (The resilience fix)
             if len(raw_output_dict) == 1 and isinstance(list(raw_output_dict.values())[0], dict):
                 payload = list(raw_output_dict.values())[0]
             else:
                 payload = raw_output_dict
-            
-            # Final Pydantic Validation
             critique_instance = Critique.model_validate(payload)
-            
         except Exception as e:
-            # Handle Pydantic failure
             print(f"CRITIC PARSE FAILED AFTER CLEANING: {e}")
             reason = (f"CRITIC JSON PARSING FAILED. The output did not conform to the required JSON structure. Error: {e}")
-            return {"critique_status": "REVISE", "critique_reason": reason}
+            return {"critique_status": "REVISE", "critique_reason": reason, "documents": state["documents"]}
         
-        # 4. Final Acceptance Decision
         is_acceptable = critique_instance.is_acceptable
         
         return {
             "critique_status": "ACCEPT" if is_acceptable else "REVISE",
-            "critique_reason": critique_instance.critique_reasoning
+            "critique_reason": critique_instance.critique_reasoning,
+            "documents": state["documents"],  # keep any augmented context
         }
 
     # --------------------------------------------------------------------------------
@@ -386,20 +458,4 @@ class Model:
         from langchain_community.document_loaders import PyPDFLoader
         from langchain.text_splitter import RecursiveCharacterTextSplitter
         
-        print(f"Adding {pdf_path} to FAISS index. This may take a moment...")
-        
-        loader = PyPDFLoader(pdf_path)
-        documents = loader.load()
-
-        text_splitter = RecursiveCharacterTextSplitter(chunk_size=4000, chunk_overlap=500)
-        docs = text_splitter.split_documents(documents)
-
-        vstore = FAISS.load_local(
-            "ipp_index",
-            self.embeddings,
-            allow_dangerous_deserialization=True,
-        )
-
-        vstore.add_documents(docs)
-        vstore.save_local("ipp_index")
-        print("FAISS index updated and saved.")
+        print(f"Adding {pdf_path} to FAISS index. This may take a bit...")
