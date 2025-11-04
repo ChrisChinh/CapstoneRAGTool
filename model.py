@@ -2,6 +2,7 @@ import os
 import openai
 from redis import Redis
 from redis.commands.graph import Graph
+from redis.commands.graph.node import Node
 
 # ─────────────────────────────
 # CONFIGURATION
@@ -13,24 +14,31 @@ GRAPH_NAME = "graphrag"
 MODEL_PROVIDER = os.getenv("MODEL_PROVIDER", "openai")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 
-
 # ─────────────────────────────
 # SIMPLE GRAPH CLIENT (FALKORDB)
 # ─────────────────────────────
 class FalkorDBClient:
-    def __init__(self, host=FALKOR_HOST, port=FALKOR_PORT, graph_name=GRAPH_NAME):
-        self.redis = Redis(host=host, port=port, decode_responses=True)
-        self.graph = Graph(graph_name, self.redis)
+    def __init__(self, host=FALKOR_HOST, port=FALKOR_PORT, graph_name=GRAPH_NAME, api_key=None):
+        # Create Redis client
+        self.redis = Redis(
+            host=host,
+            port=port,
+            password=api_key,
+            decode_responses=True
+        )
 
-    def query(self, cypher):
+        # Correct: pass Redis client first, then graph name
+        self.graph = Graph(self.redis, graph_name)
+
+    def query(self, cypher: str):
         try:
             result = self.graph.query(cypher)
             return [record.values() for record in result.result_set]
         except Exception:
             return []
 
-    def add_text_as_node(self, text):
-        node = self.graph.node(label="Document", content=text[:500])
+    def add_text_as_node(self, text: str):
+        node = Node(label="Document", properties={"content": text[:500]})
         self.graph.add_node(node)
         self.graph.commit()
 
@@ -50,14 +58,13 @@ class OpenAIModel:
         return response["choices"][0]["message"]["content"].strip()
 
 
-# Optional placeholder for local/offline model
 class LocalModel:
     def generate(self, prompt: str) -> str:
         return f"[Local model simulated response]\n\n{prompt[:200]}..."
 
 
 # ─────────────────────────────
-# MAIN MODEL WRAPPER (GUI INTERFACE)
+# MAIN MODEL WRAPPER
 # ─────────────────────────────
 class Model:
     def __init__(self):
@@ -78,7 +85,6 @@ class Model:
     # GUI-required methods ───────────────────────
     def check_connection(self) -> bool:
         try:
-            # Try a basic FalkorDB query to confirm connection
             _ = self.graph.query("MATCH (n) RETURN n LIMIT 1")
             return True
         except Exception:
@@ -88,10 +94,8 @@ class Model:
         self.system_prompt = new_prompt or self.system_prompt
 
     def add_pdf_to_rag(self, path: str):
-        # Minimal placeholder: just store file text in graph
-        # For now, FalkorDB acts as a text memory (no embeddings)
         try:
-            import fitz  # PyMuPDF
+            import fitz
             doc = fitz.open(path)
             text = "\n".join(page.get_text() for page in doc)
             self.graph.add_text_as_node(text)
@@ -99,7 +103,6 @@ class Model:
             raise RuntimeError(f"Failed to load PDF: {e}")
 
     def run(self, input_text: str) -> str:
-        # Basic RAG — search for related nodes
         query = "MATCH (n:Document) RETURN n.content LIMIT 3"
         context_nodes = self.graph.query(query)
         context = "\n\n".join([str(n[0]) for n in context_nodes if n])
