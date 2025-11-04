@@ -1,59 +1,47 @@
-from langchain_community.document_loaders import PyPDFLoader
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_community.vectorstores import FAISS
-from langchain.chains import RetrievalQA
+import os
+from langchain_community.document_loaders import PyMuPDFLoader
+from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_openai import ChatOpenAI
+from langchain_experimental.graph_transformers import LLMGraphTransformer
+from langchain_community.graphs import FalkorDBGraph
 
-import sys
+api_key = os.getenv("OPENROUTER_API_KEY")
+llm = ChatOpenAI(
+    model="openai/gpt-5", 
+    api_key=api_key,
+    base_url="https://openrouter.ai/api/v1",
+    temperature=0,
+)
 
-# 1. Load PDF
-loader = PyPDFLoader("ipps.pdf")
+# Connect to FalkorDB (default Docker config: localhost:6379, database 'test')
+print("Connecting to FalkorDB...")
+graph = FalkorDBGraph(
+    database="ipp_docs",
+    host="localhost",
+    port=6379,
+)
+print("Connected to FalkorDB.")
+
+# Load and process PDF
+print("Loading PDF...")
+pdf_path = "ipps.pdf"  # Replace with your PDF path
+loader = PyMuPDFLoader(pdf_path)
 docs = loader.load()
+print("PDF loaded.")
 
-# 2. Split into chunks
-separators = [
-    "\n\n\n",  # prioritize triple newline
-]
-splitter = RecursiveCharacterTextSplitter(separators=separators,chunk_size=6000, chunk_overlap=500)
+# Split into chunks for processing
+print("Splitting documents into chunks...")
+splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
 chunks = splitter.split_documents(docs)
+print(f"Document split into {len(chunks)} chunks.")
 
-# 3. Local sentence embedding model (fast + small)
-embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+# Build graph using LLM transformer
+print("Building graph documents...")
+transformer = LLMGraphTransformer(llm=llm)
+graph_docs = transformer.convert_to_graph_documents(chunks)
+print("Graph documents created.")
 
+# Add to FalkorDB
+graph.add_graph_documents(graph_docs)
 
-# 4. Store vectors with FAISS
-vectorstore = FAISS.from_documents(chunks, embeddings)
-vectorstore.save_local("ipp_index")
-
-# Load the vectorstore from disk
-# vectorstore = FAISS.load_local(
-#     "ipp_index",
-#     HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2"),
-#     allow_dangerous_deserialization=True,
-# )
-
-# # 5. Create retriever
-# retriever = vectorstore.as_retriever(search_type="similarity", search_kwargs={"k": 4})
-
-# # 6. Connect LangChain to LM Studio (OpenAI-compatible API)
-# llm = ChatOpenAI(
-#     model="gpt-oss-20b",                 # whatever model name you’ve loaded in LM Studio
-#     openai_api_base="http://localhost:1234/v1",  # LM Studio’s API endpoint
-#     openai_api_key="lm-studio",          # arbitrary placeholder; LM Studio ignores it
-#     temperature=0.2                      # tweak creativity if you want
-# )
-
-# # 7. Combine into RetrievalQA chain
-# qa = RetrievalQA.from_chain_type(
-#     llm=llm,
-#     retriever=retriever,
-#     chain_type="stuff",
-# )
-
-# # 8. Example query
-# prompt = "Please refactor this code snippet to use IPP instead of basic C. Functional parity should be preserved."
-# query = sys.stdin.readlines()
-# query = prompt + "\n" + "".join(query)
-# out = qa.invoke({"query": query})
-# print(out["result"] if isinstance(out, dict) and "result" in out else out)
+print("Graph built and added to FalkorDB successfully!")
