@@ -1,11 +1,13 @@
 import os
 from langchain_community.document_loaders import PyMuPDFLoader
+from langchain.schema import Document
+
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_openai import ChatOpenAI
 from langchain_experimental.graph_transformers import LLMGraphTransformer
 from langchain_community.graphs import FalkorDBGraph
 
-api_key = os.getenv("OPENROUTER_API_KEY")
+api_key: str = os.getenv("OPENROUTER_API_KEY")
 llm = ChatOpenAI(
     model="openai/gpt-5", 
     api_key=api_key,
@@ -26,19 +28,19 @@ print("Connected to FalkorDB.")
 print("Loading PDF...")
 pdf_path = "ipps.pdf"  # Replace with your PDF path
 loader = PyMuPDFLoader(pdf_path)
-docs = loader.load()
+docs: list[Document] = loader.load()
 print("PDF loaded.")
 
 # Split into chunks for processing
 print("Splitting documents into chunks...")
 splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
-chunks = splitter.split_documents(docs)
+chunks: list[Document] = splitter.split_documents(docs)
 print(f"Document split into {len(chunks)} chunks.")
 
 # Build graph using LLM transformer
 print("Building graph documents...")
 transformer = LLMGraphTransformer(llm=llm)
-graph_docs = transformer.convert_to_graph_documents(chunks)
+graph_docs: list[Document] = transformer.convert_to_graph_documents(chunks)
 print("Graph documents created.")
 
 # Add to FalkorDB
