@@ -1,12 +1,15 @@
 from tkinter import *
 from tkinter import filedialog, messagebox
 from model import Model
+from rag_creator import IndexCreator
 import threading
 import re
+import logging
 
 
 class GUI(Tk):
     def __init__(self):
+        logging.basicConfig(level=logging.WARNING, force=True)
         super().__init__()
         # Window config
         self.title("Refactor-inator")
@@ -23,8 +26,8 @@ class GUI(Tk):
         self._build_bottom_bar()
 
         # Instantiate Model and check connection
-        self.model = Model() 
-        self._check_model_connection() 
+        self.ix = IndexCreator("notused")
+        self.model = Model(self.ix) 
         
 
     # ------------------------- UI Builders -------------------------
@@ -205,19 +208,6 @@ class GUI(Tk):
         margin = 10
         c.create_line(margin, y, w - margin - 10, y, width=3, arrow=LAST, arrowshape=(12, 15, 6))
 
-    def _check_model_connection(self):
-        def check():
-            self.model_status_lb.config(text="Model Status: Checking...")
-            try:
-                response = self.model.check_connection()
-                if response:
-                    self.model_status_lb.config(text="Model Status: Connected")
-                else:
-                    self.model_status_lb.config(text="Model Status: No response")
-            except Exception as e:
-                self.model_status_lb.config(text=f"Model Status: Error - {e}")
-
-        threading.Thread(target=check, daemon=True).start()
 
     # ------------------------- Button Actions -------------------------
     def on_settings(self):
@@ -313,7 +303,7 @@ class GUI(Tk):
         ])
         if not path:
             return
-        self.model.add_pdf_to_rag(path)
+        self.ix.upload_pdf(path)
         messagebox.showinfo("Load Data", f"Loaded data from:\n{path}. Please restart the application to ensure changes take effect.")
 
     def on_save_output(self):
