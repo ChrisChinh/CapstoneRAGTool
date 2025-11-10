@@ -2,14 +2,14 @@ from openai import AzureOpenAI
 from rag_creator import IndexCreator
 import logging
 
-MODEL_NAME = "gpt-4o"
+MODEL_NAME = "gpt-4o-deployment"
 
 RAG_PROMPT = """
 You are a higly skilled software engineer that refactors IPP code. Use the reference documentation
 provided to improve and refactor code.
 
 DOCUMENTATION:
-{Context}
+{context}
 
 USER REQUEST:
 {query}
@@ -41,10 +41,12 @@ class Model:
 
 
     def run(self, query):
+        print("Querying DB...")
         context = self.index_creator.query_db(query, k=5)
         context = "\n\n----\n\n".join(context)
 
         prompt = RAG_PROMPT.format(context=context, query=query)
+        print("Running query with the following prompt:\n", prompt)
 
 
         response = self.client.chat.completions.create(
@@ -56,5 +58,6 @@ class Model:
             max_tokens=self.max_tokens,
             temperature=self.temperature
         )
+        print("Response received....")
 
-        return response.choices[0].message["content"]
+        return response.choices[0].message.content
