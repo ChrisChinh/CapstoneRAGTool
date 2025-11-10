@@ -16,6 +16,10 @@ class GUI(Tk):
         self.geometry("1000x700")
         self.minsize(900, 600)
 
+        # Instantiate Model and check connection
+        self.ix = IndexCreator("notused")
+        self.model = Model(self.ix)
+
         # Top bar: title (left) and model status (right)
         self._build_top_bar()
 
@@ -25,9 +29,7 @@ class GUI(Tk):
         # Bottom bar: Settings | Run | Load Data | Save Output | NEW: Copy Code
         self._build_bottom_bar()
 
-        # Instantiate Model and check connection
-        self.ix = IndexCreator("notused")
-        self.model = Model(self.ix) 
+ 
         
 
     # ------------------------- UI Builders -------------------------
@@ -116,6 +118,9 @@ class GUI(Tk):
         self.copy_code_btn = Button(buttons_wrap, text="Copy Code", width=12, command=self.on_copy_code)
         self.copy_code_btn.pack(side=LEFT, padx=8)
         # -----------------------------
+
+        self.recreate_db_btn = Button(buttons_wrap, text="Recreate DB", width=12, command=self.ix.create_index)
+        self.recreate_db_btn.pack(side=LEFT, padx=8)
 
     # ------------------------- Markdown Rendering -------------------------
     def _apply_markdown_tags(self, text_widget: Text, markdown_text: str):

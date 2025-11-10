@@ -34,7 +34,7 @@ INDEX_FIELDS = [
         SearchField(
             name="contentVector",
             type=SearchFieldDataType.Collection(SearchFieldDataType.Single),
-            vector_search_dimensions=1536,
+            vector_search_dimensions=3072,
             vector_search_configuration="vec-config",
         ),
     ]
@@ -74,7 +74,7 @@ class IndexCreator:
     def create_index(self):
         # First, try deleting the old one
         try:
-            self.index_client.delete_index(self.name)
+            self.index_client.delete_index(INDEX_NAME)
         except:
             pass
 
