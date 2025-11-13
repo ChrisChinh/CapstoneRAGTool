@@ -16,16 +16,7 @@ import tiktoken
 from pypdf import PdfReader
 import logging
 import os
-
-ENDPOINT = "https://chris-rag-testing.search.azure.us"
-ADMIN_KEY = os.getenv("AZURE_ADMIN_KEY")
-INDEX_NAME = "ipp-documentation"
-
-
-AZURE_OPENAI_ENDPOINT = "https://sdi-byu-capstone-azure-openai.openai.azure.us/"
-AZURE_OPENAI_KEY = os.getenv("AZURE_OPENAI_KEY")
-AZURE_EMBEDDING = "embedding"
-AZURE_OPENAI_VERSION = "2024-02-01"
+import yaml
 
 INDEX_FIELDS = [
         SimpleField(name="id", type=SearchFieldDataType.String, key=True),
@@ -40,32 +31,67 @@ INDEX_FIELDS = [
     ]
 
 class AzureClient:
-    def __init__(self, name):
-        self.index_client = SearchIndexClient(
-            endpoint=ENDPOINT,
-            credential=AzureKeyCredential(ADMIN_KEY)
-        )
-        self.name = name
+    def __init__(self, config_path):
 
-        if not self._index_exists(INDEX_NAME):
+        # Variables to be loaded from config
+        self.endpoint, self.api_key = None, None
+        self.azure_openai_endpoint, self.azure_openai_key, self.azure_openai_version = None, None, None
+        self.index_name = None
+        self.embedding_model = None
+        self.completion_model = None
+
+        self._load_config(config_path)
+
+        # Initialize Azure Search clients
+        self.index_client = SearchIndexClient(
+            endpoint=self.endpoint,
+            credential=AzureKeyCredential(self.api_key)
+        )
+
+        if not self._index_exists(self.index_name):
             self.create_index()
 
 
-        self.index: SearchIndex = self.index_client.get_index(INDEX_NAME)
+        self.index: SearchIndex = self.index_client.get_index(self.index_name)
         self.logger = logging.getLogger(__name__)
         self.logger.level = logging.DEBUG
 
         self.openai_client = AzureOpenAI(
-            azure_endpoint=AZURE_OPENAI_ENDPOINT,
-            api_key=AZURE_OPENAI_KEY,
-            api_version=AZURE_OPENAI_VERSION
+            azure_endpoint=self.azure_openai_endpoint,
+            api_key=self.azure_openai_key,
+            api_version=self.azure_openai_version
         )
 
         self.search_client = SearchClient(
-            endpoint=ENDPOINT,
-            index_name=INDEX_NAME,
-            credential=AzureKeyCredential(ADMIN_KEY)
+            endpoint=self.endpoint,
+            index_name=self.index_name,
+            credential=AzureKeyCredential(self.api_key)
         )
+
+    def _load_config(self, path):
+        config: dict = yaml.load(open(path, 'r'), Loader=yaml.FullLoader)
+        assert config is not None, "Config file is empty or invalid"
+
+        self.endpoint = config.get("azure_config", {}).get("endpoint", None)
+        self.api_key = config.get("azure_config", {}).get("api_key", None)
+
+        self.azure_openai_endpoint = config.get("azure_openai", {}).get("endpoint", None)
+        self.azure_openai_key = config.get("azure_openai", {}).get("api_key", None)
+        self.azure_openai_version = config.get("azure_openai", {}).get("api_version", None)
+        self.embedding_model = config.get("azure_openai", {}).get("embedding_model", None)
+        self.completion_model = config.get("azure_openai", {}).get("completion_model", None)
+
+        self.index_name = config.get("index_name")
+
+        self.api_key = os.getenv(self.api_key)
+        self.azure_openai_key = os.getenv(self.azure_openai_key)
+
+        assert all([self.endpoint, self.api_key,
+                    self.azure_openai_endpoint, self.azure_openai_key, self.azure_openai_version,
+                    self.embedding_model, self.completion_model, self.index_name]), "Missing configuration values"
+        
+
+
 
     def _index_exists(self, name):
         existing = self.index_client.list_index_names()
@@ -74,7 +100,7 @@ class AzureClient:
     def create_index(self):
         # First, try deleting the old one
         try:
-            self.index_client.delete_index(INDEX_NAME)
+            self.index_client.delete_index(self.index_name)
         except:
             pass
 
@@ -90,7 +116,7 @@ class AzureClient:
         )
 
         self.index = SearchIndex(
-            name=INDEX_NAME,
+            name=self.index_name,
             fields = INDEX_FIELDS,
             vector_search=vector_search
         )
@@ -124,7 +150,7 @@ class AzureClient:
 
     def _embed_text(self, text):
         response = self.openai_client.embeddings.create(
-            model=AZURE_EMBEDDING,
+            model=self.embedding_model,
             input=text
         )
 

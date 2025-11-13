@@ -1,0 +1,12 @@
+azure_config:
+  endpoint: "https://chris-rag-testing.search.azure.us"
+  api_key: "AZURE_ADMIN_KEY"
+
+azure_openai:
+  endpoint: "https://sdi-byu-capstone-azure-openai.openai.azure.us/"
+  api_key: "AZURE_OPENAI_KEY"
+  api_version: "2024-02-01"
+  embedding_model: "embedding"
+  completion_model: "gpt-4o-deployment"
+
+index_name: "ipp-documentation"

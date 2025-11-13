@@ -17,7 +17,8 @@ class GUI(Tk):
         self.minsize(900, 600)
 
         # Instantiate Model and check connection
-        self.ix = AzureClient("notused")
+        config_path = "config/config.yaml"
+        self.ix = AzureClient(config_path)
         self.model = Model(self.ix)
 
         # Top bar: title (left) and model status (right)
