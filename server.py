@@ -11,8 +11,8 @@ from pydantic import BaseModel, Field
 # Lazy import of the heavy RAG model to keep the server start lightweight
 from importlib import import_module
 
-from model import Model
-from rag_creator import IndexCreator
+from src.model import Model
+from src.azure_client import AzureClient
 
 
 # -----------------------------

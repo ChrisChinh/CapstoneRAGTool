@@ -1,5 +1,5 @@
 from openai import AzureOpenAI
-from rag_creator import IndexCreator
+from azure_client import AzureClient
 import logging
 
 MODEL_NAME = "gpt-4o-deployment"
@@ -25,7 +25,7 @@ INSTRUCTIONS:
 SYSTEM_PROMPT = "You are an expert refactoring software engineer."
 
 class Model:
-    def __init__(self, index_creator: IndexCreator):
+    def __init__(self, index_creator: AzureClient):
         self.index_creator = index_creator
         self.logger = logging.getLogger(__name__)
         self.logger.level = logging.INFO

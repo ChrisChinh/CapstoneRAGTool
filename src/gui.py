@@ -1,7 +1,7 @@
 from tkinter import *
 from tkinter import filedialog, messagebox
 from model import Model
-from rag_creator import IndexCreator
+from azure_client import AzureClient
 import threading
 import re
 import logging
@@ -17,7 +17,7 @@ class GUI(Tk):
         self.minsize(900, 600)
 
         # Instantiate Model and check connection
-        self.ix = IndexCreator("notused")
+        self.ix = AzureClient("notused")
         self.model = Model(self.ix)
 
         # Top bar: title (left) and model status (right)

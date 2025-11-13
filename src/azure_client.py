@@ -39,7 +39,7 @@ INDEX_FIELDS = [
         ),
     ]
 
-class IndexCreator:
+class AzureClient:
     def __init__(self, name):
         self.index_client = SearchIndexClient(
             endpoint=ENDPOINT,
