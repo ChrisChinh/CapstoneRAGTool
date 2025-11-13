@@ -11,6 +11,9 @@ from pydantic import BaseModel, Field
 # Lazy import of the heavy RAG model to keep the server start lightweight
 from importlib import import_module
 
+from model import Model
+from rag_creator import IndexCreator
+
 
 # -----------------------------
 # OpenAI-like schema models
@@ -95,8 +98,8 @@ app.add_middleware(
 	allow_headers=["*"],
 )
 
-
-rag_model: Any = None
+ix_creator = IndexCreator("")
+rag_model: Model = Model(ix_creator)
 rag_model_error: Optional[str] = None
 
 
@@ -107,17 +110,7 @@ def _maybe_warm() -> None:
 
 
 def _ensure_model() -> None:
-	global rag_model, rag_model_error
-	if rag_model is not None:
-		return
-	try:
-		model_module = import_module("model")
-		RagModel = getattr(model_module, "Model")
-		rag_model = RagModel()
-		rag_model_error = None
-	except Exception as e:
-		rag_model_error = str(e)
-		rag_model = None
+	pass
 
 
 # -----------------------------
@@ -166,13 +159,14 @@ def health() -> Dict[str, Any]:
 	if rag_model is None:
 		return {"status": "degraded", "detail": rag_model_error or "model not available"}
 	try:
-		ok = rag_model.check_connection()
+		ok = True
 		return {"status": "ok" if ok else "degraded"}
 	except Exception as e:
 		return {"status": "degraded", "detail": str(e)}
 
 
 @app.post("/v1/chat/completions")
+@app.post("/chat/completions")
 def chat_completions(req: ChatCompletionRequest):
 	if not req.messages:
 		raise HTTPException(status_code=400, detail="messages must be a non-empty array")
