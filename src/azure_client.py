@@ -18,6 +18,7 @@ import logging
 import os
 import yaml
 
+# The schema for our search index
 INDEX_FIELDS = [
         SimpleField(name="id", type=SearchFieldDataType.String, key=True),
         SearchableField(name="content", type=SearchFieldDataType.String),
@@ -31,6 +32,9 @@ INDEX_FIELDS = [
     ]
 
 class ModelWrapper:
+    """
+    Wrapper class to create Azure OpenAI models from YAML configuration dicts
+    """
     def __init__(self, config_dict: dict):
         self.model = config_dict.get("model")
         self.api_key = os.getenv(config_dict.get("api_key"))
@@ -49,26 +53,31 @@ class ModelWrapper:
 
 class AzureClient:
     def __init__(self, config_path):
+
+        # Load the YAML configuration values
         self._load_config(config_path)
 
         # Initialize Azure Search clients
+        # This is what is used to search our RAG database
         self.index_client = SearchIndexClient(
             endpoint=self.endpoint,
             credential=AzureKeyCredential(self.api_key)
         )
 
+        # If the specific RAG index listed does not exist, we create it
         if not self._index_exists(self.index_name):
             self.create_index()
-
 
         self.index: SearchIndex = self.index_client.get_index(self.index_name)
         self.logger = logging.getLogger(__name__)
         self.logger.level = logging.DEBUG
 
+        # Init the embeddings and completions model
         self.embeddings_model = ModelWrapper(self.embedding_config).get_model()
         self.embedding_name = self.embedding_config.get("model")
         self.completions_model = ModelWrapper(self.completion_config).get_model()
 
+        # Search client for the RAG index
         self.search_client = SearchClient(
             endpoint=self.endpoint,
             index_name=self.index_name,
@@ -76,6 +85,9 @@ class AzureClient:
         )
 
     def _load_config(self, path):
+        """
+        Open a YAML file and parse for the necessary information on endpoints and 
+        API keys"""
         config: dict = yaml.load(open(path, 'r'), Loader=yaml.FullLoader)
         assert config is not None, "Config file is empty or invalid"
 
@@ -93,11 +105,16 @@ class AzureClient:
 
 
     def _index_exists(self, name):
+        """
+        Check if an index exists within the Azure database
+        """
         existing = self.index_client.list_index_names()
         return name in existing
        
     def create_index(self):
-        # First, try deleting the old one
+        """
+        Recreates the RAG index. Useful for testing or initializing a new index for future projects
+        """
         try:
             self.index_client.delete_index(self.index_name)
         except:
