@@ -19,6 +19,7 @@ INSTRUCTIONS:
 - If something is unclear, only reason using the information you have.
 - Code should prioritize functionality over all else.
 - Include brief explanations of what you have done.
+- NEVER use ipps.h, only use ipp.h
 
 """
 
@@ -29,7 +30,7 @@ class Model:
         self.index_creator = index_creator
         self.logger = logging.getLogger(__name__)
         self.logger.level = logging.INFO
-        self.client = index_creator.openai_client
+        self.client = index_creator.get_model()
 
         self.temperature = 0.3
         self.max_tokens = 1500

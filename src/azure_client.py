@@ -30,16 +30,25 @@ INDEX_FIELDS = [
         ),
     ]
 
+class ModelWrapper:
+    def __init__(self, config_dict: dict):
+        self.model = config_dict.get("model")
+        self.api_key = os.getenv(config_dict.get("api_key"))
+        self.endpoint = config_dict.get("endpoint")
+        self.api_version = config_dict.get("api_version")
+
+        self.model = AzureOpenAI(
+            azure_endpoint=self.endpoint,
+            api_key=self.api_key,
+            api_version=self.api_version
+        )
+
+    def get_model(self):
+        return self.model
+
+
 class AzureClient:
     def __init__(self, config_path):
-
-        # Variables to be loaded from config
-        self.endpoint, self.api_key = None, None
-        self.azure_openai_endpoint, self.azure_openai_key, self.azure_openai_version = None, None, None
-        self.index_name = None
-        self.embedding_model = None
-        self.completion_model = None
-
         self._load_config(config_path)
 
         # Initialize Azure Search clients
@@ -56,11 +65,9 @@ class AzureClient:
         self.logger = logging.getLogger(__name__)
         self.logger.level = logging.DEBUG
 
-        self.openai_client = AzureOpenAI(
-            azure_endpoint=self.azure_openai_endpoint,
-            api_key=self.azure_openai_key,
-            api_version=self.azure_openai_version
-        )
+        self.embeddings_model = ModelWrapper(self.embedding_config).get_model()
+        self.embedding_name = self.embedding_config.get("model")
+        self.completions_model = ModelWrapper(self.completion_config).get_model()
 
         self.search_client = SearchClient(
             endpoint=self.endpoint,
@@ -72,25 +79,17 @@ class AzureClient:
         config: dict = yaml.load(open(path, 'r'), Loader=yaml.FullLoader)
         assert config is not None, "Config file is empty or invalid"
 
-        self.endpoint = config.get("azure_config", {}).get("endpoint", None)
-        self.api_key = config.get("azure_config", {}).get("api_key", None)
+        self.endpoint = config.get("search_config", {}).get("endpoint", None)
+        self.api_key = config.get("search_config", {}).get("api_key", None)
 
-        self.azure_openai_endpoint = config.get("azure_openai", {}).get("endpoint", None)
-        self.azure_openai_key = config.get("azure_openai", {}).get("api_key", None)
-        self.azure_openai_version = config.get("azure_openai", {}).get("api_version", None)
-        self.embedding_model = config.get("azure_openai", {}).get("embedding_model", None)
-        self.completion_model = config.get("azure_openai", {}).get("completion_model", None)
+        self.embedding_config = config.get("embedding", {})
+        self.completion_config = config.get("completions", {})
 
         self.index_name = config.get("index_name")
 
         self.api_key = os.getenv(self.api_key)
-        self.azure_openai_key = os.getenv(self.azure_openai_key)
 
-        assert all([self.endpoint, self.api_key,
-                    self.azure_openai_endpoint, self.azure_openai_key, self.azure_openai_version,
-                    self.embedding_model, self.completion_model, self.index_name]), "Missing configuration values"
-        
-
+        assert all([self.endpoint, self.api_key, self.embedding_config, self.completion_config, self.index_name]), "Missing configuration values"
 
 
     def _index_exists(self, name):
@@ -149,8 +148,8 @@ class AzureClient:
     
 
     def _embed_text(self, text):
-        response = self.openai_client.embeddings.create(
-            model=self.embedding_model,
+        response = self.embeddings_model.embeddings.create(
+            model=self.embedding_name,
             input=text
         )
 
@@ -200,4 +199,6 @@ class AzureClient:
         return text_chunks
 
 
+    def get_model(self):
+        return self.completions_model
         
