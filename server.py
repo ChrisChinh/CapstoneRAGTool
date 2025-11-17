@@ -98,7 +98,7 @@ app.add_middleware(
 	allow_headers=["*"],
 )
 
-ix_creator = IndexCreator("")
+ix_creator = AzureClient(config_path="config/config.yaml")
 rag_model: Model = Model(ix_creator)
 rag_model_error: Optional[str] = None
 
