@@ -1,17 +1,25 @@
 from tkinter import *
 from tkinter import filedialog, messagebox
 from model import Model
+from azure_client import AzureClient
 import threading
 import re
+import logging
 
 
 class GUI(Tk):
     def __init__(self):
+        logging.basicConfig(level=logging.WARNING, force=True)
         super().__init__()
         # Window config
         self.title("Refactor-inator")
         self.geometry("1000x700")
         self.minsize(900, 600)
+
+        # Instantiate Model and check connection
+        config_path = "config/config.yaml"
+        self.ix = AzureClient(config_path)
+        self.model = Model(self.ix)
 
         # Top bar: title (left) and model status (right)
         self._build_top_bar()
@@ -22,9 +30,7 @@ class GUI(Tk):
         # Bottom bar: Settings | Run | Load Data | Save Output | NEW: Copy Code
         self._build_bottom_bar()
 
-        # Instantiate Model and check connection
-        self.model = Model() 
-        self._check_model_connection() 
+ 
         
 
     # ------------------------- UI Builders -------------------------
@@ -113,6 +119,9 @@ class GUI(Tk):
         self.copy_code_btn = Button(buttons_wrap, text="Copy Code", width=12, command=self.on_copy_code)
         self.copy_code_btn.pack(side=LEFT, padx=8)
         # -----------------------------
+
+        self.recreate_db_btn = Button(buttons_wrap, text="Recreate DB", width=12, command=self.ix.create_index)
+        self.recreate_db_btn.pack(side=LEFT, padx=8)
 
     # ------------------------- Markdown Rendering -------------------------
     def _apply_markdown_tags(self, text_widget: Text, markdown_text: str):
@@ -205,19 +214,6 @@ class GUI(Tk):
         margin = 10
         c.create_line(margin, y, w - margin - 10, y, width=3, arrow=LAST, arrowshape=(12, 15, 6))
 
-    def _check_model_connection(self):
-        def check():
-            self.model_status_lb.config(text="Model Status: Checking...")
-            try:
-                response = self.model.check_connection()
-                if response:
-                    self.model_status_lb.config(text="Model Status: Connected")
-                else:
-                    self.model_status_lb.config(text="Model Status: No response")
-            except Exception as e:
-                self.model_status_lb.config(text=f"Model Status: Error - {e}")
-
-        threading.Thread(target=check, daemon=True).start()
 
     # ------------------------- Button Actions -------------------------
     def on_settings(self):
@@ -291,9 +287,16 @@ class GUI(Tk):
         def run_model():
             try:
                 answer = self.model.run(text)
+                # Success path: Execute _apply_markdown_tags on the main thread
                 self.after(0, lambda: self._apply_markdown_tags(self.output_text, answer))
+            
             except Exception as e:
-                self.after(0, lambda: self.output_text.insert("1.0", f"Error during model run: {e}"))
+                # --- FIX APPLIED HERE ---
+                # Pass the exception 'e' as a default argument 'err' to the lambda.
+                # This binds the current value of 'e' immediately.
+                self.after(0, lambda err=e: self.output_text.insert("1.0", f"Error during model run: {err}"))
+                # --- END FIX ---
+            
             finally:
                 self.after(0, tl.destroy)
 
@@ -306,7 +309,7 @@ class GUI(Tk):
         ])
         if not path:
             return
-        self.model.add_pdf_to_rag(path)
+        self.ix.upload_pdf(path)
         messagebox.showinfo("Load Data", f"Loaded data from:\n{path}. Please restart the application to ensure changes take effect.")
 
     def on_save_output(self):

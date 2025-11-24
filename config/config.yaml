@@ -1,0 +1,17 @@
+search_config:
+  endpoint: "https://chris-rag-testing.search.azure.us"
+  api_key: "AZURE_ADMIN_KEY"
+
+embedding:
+  endpoint: "https://jerem-mhxlpahv-usgovarizona.openai.azure.us/openai/deployments/text-embedding-3-large/embeddings?api-version=2023-05-15"
+  api_key: "AZURE_OPENAI_KEY"
+  api_version: "2024-02-01"
+  model: "text-embedding-3-large"
+
+completions:
+  endpoint: "https://jerem-mhxlpahv-usgovarizona.openai.azure.us/openai/deployments/gpt-4o/chat/completions?api-version=2025-01-01-preview"
+  api_key: "AZURE_OPENAI_KEY"
+  api_version: "2024-12-01-preview"
+  model: "gpt-4o"
+
+index_name: "ipp-documentation"
