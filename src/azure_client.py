@@ -28,7 +28,7 @@ INDEX_FIELDS = [
             name="contentVector",
             type=SearchFieldDataType.Collection(SearchFieldDataType.Single),
             vector_search_dimensions=3072,
-            vector_search_profile_name="vec-profile",  # Changed from vector_search_configuration
+            vector_search_profile_name="vec-profile",
         ),
     ]
 
@@ -65,11 +65,6 @@ class AzureClient:
             credential=AzureKeyCredential(self.api_key)
         )
 
-        # If the specific RAG index listed does not exist, we create it
-        if not self._index_exists(self.index_name):
-            self.create_index()
-
-        self.index: SearchIndex = self.index_client.get_index(self.index_name)
         self.logger = logging.getLogger(__name__)
         self.logger.level = logging.DEBUG
 
@@ -77,13 +72,6 @@ class AzureClient:
         self.embeddings_model = ModelWrapper(self.embedding_config).get_model()
         self.embedding_name = self.embedding_config.get("model")
         self.completions_model = ModelWrapper(self.completion_config).get_model()
-
-        # Search client for the RAG index
-        self.search_client = SearchClient(
-            endpoint=self.endpoint,
-            index_name=self.index_name,
-            credential=AzureKeyCredential(self.api_key)
-        )
 
     def _load_config(self, path):
         """
@@ -98,26 +86,41 @@ class AzureClient:
         self.embedding_config = config.get("embedding", {})
         self.completion_config = config.get("completions", {})
 
-        self.index_name = config.get("index_name")
-
         self.api_key = os.getenv(self.api_key)
 
-        assert all([self.endpoint, self.api_key, self.embedding_config, self.completion_config, self.index_name]), "Missing configuration values"
+        assert all([self.endpoint, self.api_key, self.embedding_config, self.completion_config]), "Missing configuration values"
 
 
-    def _index_exists(self, name):
+    def _index_exists(self, index_name):
         """
         Check if an index exists within the Azure database
         """
         existing = self.index_client.list_index_names()
-        return name in existing
-       
-    def create_index(self):
+        return index_name in existing
+
+    def get_index_names(self):
         """
-        Recreates the RAG index. Useful for testing or initializing a new index for future projects
+        Returns a list of all index names stored within the IndexClient
+        """
+        return list(self.index_client.list_index_names())
+
+    def _get_search_client(self, index_name):
+        """
+        Returns a SearchClient for the specified index
+        """
+        return SearchClient(
+            endpoint=self.endpoint,
+            index_name=index_name,
+            credential=AzureKeyCredential(self.api_key)
+        )
+       
+    def create_index(self, index_name):
+        """
+        Creates a new RAG index with the specified name.
+        If the index already exists, it will be deleted and recreated.
         """
         try:
-            self.index_client.delete_index(self.index_name)
+            self.index_client.delete_index(index_name)
         except:
             pass
 
@@ -135,13 +138,14 @@ class AzureClient:
             ]
         )
 
-        self.index = SearchIndex(
-            name=self.index_name,
+        index = SearchIndex(
+            name=index_name,
             fields=INDEX_FIELDS,
             vector_search=vector_search
         )
 
-        self.index_client.create_index(self.index)
+        self.index_client.create_index(index)
+        self.logger.info(f"Created index: {index_name}")
 
     def _chunk_pdf(self, doc):
         enc = tiktoken.get_encoding("cl100k_base")
@@ -167,7 +171,6 @@ class AzureClient:
         self.logger.info(f"Extracted {len(all_chunks)} chunks from PDF")
         return all_chunks
     
-
     def _embed_text(self, text):
         response = self.embeddings_model.embeddings.create(
             model=self.embedding_name,
@@ -177,9 +180,19 @@ class AzureClient:
         return response.data[0].embedding
             
 
-    def upload_pdf(self, pdf, upload_freq=50):
-        self.logger.info("Beginning PDF upload, please wait...")
+    def upload_pdf(self, pdf, index_name, upload_freq=50):
+        """
+        Uploads a PDF to the specified index.
+        Creates the index if it doesn't exist.
+        """
+        # Create index if it doesn't exist
+        if not self._index_exists(index_name):
+            self.create_index(index_name)
+
+        self.logger.info(f"Beginning PDF upload to index '{index_name}', please wait...")
         chunks = self._chunk_pdf(pdf)
+
+        search_client = self._get_search_client(index_name)
 
         batch = []
         for i, (page, text) in enumerate(chunks):
@@ -193,18 +206,25 @@ class AzureClient:
             batch.append(doc)
 
             if len(batch) >= upload_freq:
-                self.search_client.upload_documents(documents=batch)
+                search_client.upload_documents(documents=batch)
                 batch.clear()
         
         if batch:
-            self.search_client.upload_documents(documents=batch)
+            search_client.upload_documents(documents=batch)
 
-        self.logger.info("All PDF chunks uploaded to Azure Search")
+        self.logger.info(f"All PDF chunks uploaded to index '{index_name}'")
 
-    def query_db(self, query, k = 5):
+    def query_db(self, query, index_name, k=5):
+        """
+        Queries the specified index for relevant content.
+        """
+        if not self._index_exists(index_name):
+            raise ValueError(f"Index '{index_name}' does not exist")
+
         query_emb = self._embed_text(query)
+        search_client = self._get_search_client(index_name)
 
-        results = self.search_client.search(
+        results = search_client.search(
             search_text=None,
             vectors=[
                 {
