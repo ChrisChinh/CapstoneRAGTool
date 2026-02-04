@@ -9,7 +9,8 @@ from azure.search.documents.indexes.models import (
     SearchField,
     SearchFieldDataType,
     VectorSearch,
-    HnswVectorSearchAlgorithmConfiguration
+    HnswAlgorithmConfiguration,
+    VectorSearchProfile,
 )
 
 import tiktoken
@@ -27,7 +28,7 @@ INDEX_FIELDS = [
             name="contentVector",
             type=SearchFieldDataType.Collection(SearchFieldDataType.Single),
             vector_search_dimensions=3072,
-            vector_search_configuration="vec-config",
+            vector_search_profile_name="vec-profile",  # Changed from vector_search_configuration
         ),
     ]
 
@@ -120,20 +121,23 @@ class AzureClient:
         except:
             pass
 
-        algorithm = HnswVectorSearchAlgorithmConfiguration(
+        algorithm = HnswAlgorithmConfiguration(
             name='vec-config',
-            kind="hnsw"
         )
 
         vector_search = VectorSearch(
-            algorithm_configurations=[
-                algorithm
+            algorithms=[algorithm],
+            profiles=[
+                VectorSearchProfile(
+                    name="vec-profile",
+                    algorithm_configuration_name="vec-config"
+                )
             ]
         )
 
         self.index = SearchIndex(
             name=self.index_name,
-            fields = INDEX_FIELDS,
+            fields=INDEX_FIELDS,
             vector_search=vector_search
         )
 
@@ -218,4 +222,4 @@ class AzureClient:
 
     def get_model(self):
         return self.completions_model
-        
+
