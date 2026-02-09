@@ -1,16 +1,16 @@
 search_config:
   endpoint: "https://chris-rag-testing.search.azure.us"
-  api_key: "jdIuRcERiAPbppioiMgT3vt6LBdZEGnbFIY53wYi9OAzSeCp0g7O"
+  api_key: AZURE_SEARCH_KEY
 
 embedding:
   endpoint: "https://ai-aifoundryarizona750873844815.openai.azure.us/openai/deployments/text-embedding-3-large/embeddings?api-version=2023-05-15"
-  api_key: "2rtiVftx6izdAcJ2uJyvslV5Dh84yRkpe04uYC7AlUsUZyKlnGkCJQQJ99BLAJhseKSIUj3iAAAAACOGr5RN"
+  api_key: AZURE_OPENAI_KEY
   api_version: "2024-02-01"
   model: "text-embedding-3-large"
 
 completions:
   endpoint: "https://aifoundry0436939217.openai.azure.us/openai/deployments/gpt-4o-virginia-s/chat/completions?api-version=2025-01-01-preview"
-  api_key: "2rtiVftx6izdAcJ2uJyvslV5Dh84yRkpe04uYC7AlUsUZyKlnGkCJQQJ99BLAJhseKSIUj3iAAAAACOGr5RN"
+  api_key: AZURE_OPENAI_KEY
   api_version: "2024-12-01-preview"
   model: "gpt-4o"
 

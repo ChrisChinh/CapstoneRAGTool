@@ -38,7 +38,7 @@ class ModelWrapper:
     """
     def __init__(self, config_dict: dict):
         self.model = config_dict.get("model")
-        self.api_key = config_dict.get("api_key")
+        self.api_key = os.getenv(config_dict.get("api_key"))
         self.endpoint = config_dict.get("endpoint")
         self.api_version = config_dict.get("api_version")
 
@@ -82,6 +82,7 @@ class AzureClient:
 
         self.endpoint = config.get("search_config", {}).get("endpoint", None)
         self.api_key = config.get("search_config", {}).get("api_key", None)
+        self.api_key = os.getenv(self.api_key)
 
         self.embedding_config = config.get("embedding", {})
         self.completion_config = config.get("completions", {})

@@ -1,5 +1,5 @@
-from azure_client import AzureClient
-from flask import Flask, request, jsonify
+from src.azure_client import AzureClient
+from flask import Flask, request, jsonify, render_template
 import logging
 
 
@@ -12,7 +12,9 @@ class Server:
         self.add_route("/", self.load_page)
 
     def load_page(self):
-        return "Hello World"
+        indexes = self.azure_client.get_index_names()
+        indexes = [{"id": idx, "name": idx, "created_at": "N/A"} for idx in indexes]
+        return render_template("index.html", indexes=indexes)
         
 
     def add_route(self, route, handler):
