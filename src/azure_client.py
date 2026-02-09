@@ -38,7 +38,7 @@ class ModelWrapper:
     """
     def __init__(self, config_dict: dict):
         self.model = config_dict.get("model")
-        self.api_key = os.getenv(config_dict.get("api_key"))
+        self.api_key = config_dict.get("api_key")
         self.endpoint = config_dict.get("endpoint")
         self.api_version = config_dict.get("api_version")
 
@@ -86,9 +86,9 @@ class AzureClient:
         self.embedding_config = config.get("embedding", {})
         self.completion_config = config.get("completions", {})
 
-        self.api_key = os.getenv(self.api_key)
+        # self.api_key = os.getenv(self.api_key)
 
-        assert all([self.endpoint, self.api_key, self.embedding_config, self.completion_config]), "Missing configuration values"
+        assert all([self.endpoint, self.api_key, self.embedding_config]), "Missing configuration values"
 
 
     def _index_exists(self, index_name):
