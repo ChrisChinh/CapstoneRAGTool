@@ -243,4 +243,14 @@ class AzureClient:
 
     def get_model(self):
         return self.completions_model
+    
+    def delete_index(self, index_name):
+        """
+        Deletes the specified index from the Azure Search service.
+        """
+        if not self._index_exists(index_name):
+            raise ValueError(f"Index '{index_name}' does not exist")
+
+        self.index_client.delete_index(index_name)
+        self.logger.info(f"Deleted index: {index_name}")
 
