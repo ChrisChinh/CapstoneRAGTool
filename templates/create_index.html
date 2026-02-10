@@ -45,17 +45,20 @@
         }
         input[type="text"],
         input[type="number"],
-        select {
+        select,
+        textarea {
             width: 100%;
             padding: 12px;
             border: 2px solid #e0e0e0;
             border-radius: 5px;
             font-size: 14px;
             transition: border-color 0.3s;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
         }
         input[type="text"]:focus,
         input[type="number"]:focus,
-        select:focus {
+        select:focus,
+        textarea:focus {
             outline: none;
             border-color: #667eea;
         }
@@ -129,6 +132,11 @@
                     <option value="2048">2048</option>
                     <option value="4096">4096</option>
                 </select>
+            </div>
+            
+            <div class="form-group">
+                <label for="description">Description</label>
+                <textarea id="description" name="description" rows="5" placeholder="Enter index description"></textarea>
             </div>
             
             <div class="form-group">
