@@ -20,17 +20,18 @@ import os
 import yaml
 
 # The schema for our search index
-INDEX_FIELDS = [
-        SimpleField(name="id", type=SearchFieldDataType.String, key=True),
-        SearchableField(name="content", type=SearchFieldDataType.String),
-        SimpleField(name="page", type=SearchFieldDataType.Int32),
-        SearchField(
-            name="contentVector",
-            type=SearchFieldDataType.Collection(SearchFieldDataType.Single),
-            vector_search_dimensions=3072,
-            vector_search_profile_name="vec-profile",
-        ),
-    ]
+def create_index_schema(search_dim=3072):
+    return [
+            SimpleField(name="id", type=SearchFieldDataType.String, key=True),
+            SearchableField(name="content", type=SearchFieldDataType.String),
+            SimpleField(name="page", type=SearchFieldDataType.Int32),
+            SearchField(
+                name="contentVector",
+                type=SearchFieldDataType.Collection(SearchFieldDataType.Single),
+                vector_search_dimensions=search_dim,
+                vector_search_profile_name="vec-profile",
+            ),
+        ]
 
 class ModelWrapper:
     """
@@ -101,9 +102,17 @@ class AzureClient:
 
     def get_index_names(self):
         """
-        Returns a list of all index names stored within the IndexClient
+        Returns a list of dictionaries containing index details
         """
-        return list(self.index_client.list_index_names())
+        indexes = []
+        for name in self.index_client.list_index_names():
+            stats = self.index_client.get_index_statistics(name)
+            indexes.append({
+                "name": name,
+                "id": name,
+                "document_count": stats['document_count'],
+            })
+        return indexes
 
     def _get_search_client(self, index_name):
         """
@@ -115,7 +124,7 @@ class AzureClient:
             credential=AzureKeyCredential(self.api_key)
         )
        
-    def create_index(self, index_name):
+    def create_index(self, index_name, search_dim=3072):
         """
         Creates a new RAG index with the specified name.
         If the index already exists, it will be deleted and recreated.
@@ -141,18 +150,18 @@ class AzureClient:
 
         index = SearchIndex(
             name=index_name,
-            fields=INDEX_FIELDS,
+            fields=create_index_schema(search_dim),
             vector_search=vector_search
         )
 
         self.index_client.create_index(index)
         self.logger.info(f"Created index: {index_name}")
 
-    def _chunk_pdf(self, doc):
+    def _chunk_pdf(self, doc, chunk_size=800):
         enc = tiktoken.get_encoding("cl100k_base")
 
 
-        def chunk_text(text, max_tokens=800):
+        def chunk_text(text, max_tokens=chunk_size):
             tokens = enc.encode(text)
             chunks = []
             for i in range(0, len(tokens), max_tokens):
@@ -181,7 +190,7 @@ class AzureClient:
         return response.data[0].embedding
             
 
-    def upload_pdf(self, pdf, index_name, upload_freq=50):
+    def upload_pdf(self, pdf, index_name, chunk_size=800, upload_freq=50):
         """
         Uploads a PDF to the specified index.
         Creates the index if it doesn't exist.
@@ -191,7 +200,7 @@ class AzureClient:
             self.create_index(index_name)
 
         self.logger.info(f"Beginning PDF upload to index '{index_name}', please wait...")
-        chunks = self._chunk_pdf(pdf)
+        chunks = self._chunk_pdf(pdf, chunk_size=chunk_size)
 
         search_client = self._get_search_client(index_name)
 
