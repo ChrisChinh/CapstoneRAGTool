@@ -18,6 +18,8 @@ from pypdf import PdfReader
 import logging
 import os
 import yaml
+import trafilatura
+import azure.functions as func
 
 # The schema for our search index
 def create_index_schema(search_dim=3072):
@@ -249,7 +251,94 @@ class AzureClient:
             text_chunks.append(r['content'])
         return text_chunks
 
+    def search_url(self, url:str):
+        if not url:
+            print("Error: no URL provided")
+            return None
+        try:
+            print("Attempting to download and extract content from URL...")
+            downloaded = trafilatura.fetch_url(url)
+            if downloaded is None:
+                print("Error: Failed to download content.")
+                return None
+            text = trafilatura.extract(downloaded)
+            if text is None:
+                print("Error: Failed to extract content.")
+                return None
+            # --- TEST PRINT HERE ---
+            print("\n--- SCRAPED CONTENT START ---")
+            print(text[:500]) # Print first 500 chars to terminal
+            print("--- SCRAPED CONTENT END ---\n")
+            return text
+        except Exception as e:
+            print(f"An error occurred: {str(e)}")
+            return None
+        
+    def upload_text(self, text, index_name, chunk_size=800, upload_freq=50):
+        # 1. Debug: Check if we even have text
+        if not text or len(text) < 10:
+            print("❌ ERROR: Text content is empty or too short!")
+            return
 
+        print(f"✅ Text found: {len(text)} characters. Proceeding...")
+
+        if not self._index_exists(index_name):
+            print(f"ℹ️ Creating new index '{index_name}'...")
+            self.create_index(index_name) # Ensure this matches your embedding dim!
+
+        enc = tiktoken.get_encoding("cl100k_base")
+        tokens = enc.encode(text)
+        print(f"📊 Token count: {len(tokens)}")
+
+        chunks = []
+        for i in range(0, len(tokens), chunk_size):
+            chunk_tokens = tokens[i:i + chunk_size]
+            chunks.append(enc.decode(chunk_tokens))
+        
+        print(f"✂️ Total chunks created: {len(chunks)}")
+
+        search_client = self._get_search_client(index_name)
+        batch = []
+
+        for i, chunk_content in enumerate(chunks):
+            try:
+                # Debug: Print before embedding
+                # print(f"   Embedding chunk {i}...") 
+                emb = self._embed_text(chunk_content)
+                
+                # CRITICAL DEBUG: Check dimensions
+                if i == 0:
+                    print(f"📏 Embedding Dimension Detected: {len(emb)}")
+                    # You can compare this to what your index expects here
+
+                doc = {
+                    "id": f"url-chunk-{i}", 
+                    "content": chunk_content,
+                    "page": 1, 
+                    "contentVector": emb
+                }
+                batch.append(doc)
+
+                if len(batch) >= upload_freq:
+                    print(f"   Uploading batch of {len(batch)}...")
+                    search_client.upload_documents(documents=batch)
+                    batch.clear()
+                    
+            except Exception as e:
+                # MAKE THIS VISIBLE
+                print(f"❌ CRITICAL ERROR on chunk {i}: {str(e)}")
+                # Stop the loop so you see the error
+                break 
+
+        if batch:
+            print(f"   Uploading final batch of {len(batch)}...")
+            try:
+                search_client.upload_documents(documents=batch)
+            except Exception as e:
+                print(f"❌ CRITICAL ERROR on final batch: {str(e)}")
+
+        print(f"🏁 Finished processing.")
+        
     def get_model(self):
         return self.completions_model
     

@@ -20,7 +20,7 @@ class Server:
         search_dim = int(form_data.get('dimensions', 3072))
         chunk_size = int(form_data.get('chunk_size', 800))
         uploaded_files = request.files.getlist('files')
-
+        uploaded_url = request.form.get('url')
         if not index_name:
             return jsonify({"error": "Index name is required"}), 400
         try:
@@ -28,6 +28,10 @@ class Server:
             for file in uploaded_files:
                 if file.filename.endswith('.pdf'):
                     self.azure_client.upload_pdf(file, index_name, chunk_size=chunk_size)
+                elif uploaded_url:
+                    text = self.azure_client.search_url(uploaded_url)
+                    if text:
+                        self.azure_client.upload_text(text, index_name, chunk_size=chunk_size)
             return jsonify({"message": f"Index '{index_name}' created and files uploaded successfully"})
         except Exception as e:
             logging.error(f"Error creating index: {e}")
