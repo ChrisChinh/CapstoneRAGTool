@@ -18,7 +18,10 @@ from pypdf import PdfReader
 import logging
 import os
 import yaml
+# for website scraping
 import trafilatura
+from lxml import html
+from urllib.parse import urlparse
 import azure.functions as func
 
 # The schema for our search index
@@ -191,7 +194,6 @@ class AzureClient:
 
         return response.data[0].embedding
             
-
     def upload_pdf(self, pdf, index_name, chunk_size=800, upload_freq=50):
         """
         Uploads a PDF to the specified index.
@@ -251,34 +253,34 @@ class AzureClient:
             text_chunks.append(r['content'])
         return text_chunks
 
-    def search_url(self, url:str):
-        if not url:
-            print("Error: no URL provided")
-            return None
-        try:
-            print("Attempting to download and extract content from URL...")
-            downloaded = trafilatura.fetch_url(url)
-            if downloaded is None:
-                print("Error: Failed to download content.")
-                return None
-            text = trafilatura.extract(downloaded)
-            if text is None:
-                print("Error: Failed to extract content.")
-                return None
-            # --- TEST PRINT HERE ---
-            print("\n--- SCRAPED CONTENT START ---")
-            print(text[:500]) # Print first 500 chars to terminal
-            print("--- SCRAPED CONTENT END ---\n")
-            return text
-        except Exception as e:
-            print(f"An error occurred: {str(e)}")
-            return None
+    # def search_url(self, url:str):
+    #     if not url:
+    #         print("Error: no URL provided")
+    #         return None
+    #     try:
+    #         print("Attempting to download and extract content from URL...")
+    #         downloaded = trafilatura.fetch_url(url)
+    #         if downloaded is None:
+    #             print("Error: Failed to download content.")
+    #             return None
+    #         text = trafilatura.extract(downloaded)
+    #         if text is None:
+    #             print("Error: Failed to extract content.")
+    #             return None
+    #         # --- TEST PRINT HERE ---
+    #         print("\n--- SCRAPED CONTENT START ---")
+    #         print(text[:500]) # Print first 500 chars to terminal
+    #         print("--- SCRAPED CONTENT END ---\n")
+    #         return text
+    #     except Exception as e:
+    #         print(f"An error occurred: {str(e)}")
+    #         return None
         
     def upload_text(self, text, index_name, chunk_size=800, upload_freq=50):
         # 1. Debug: Check if we even have text
         if not text or len(text) < 10:
             print("❌ ERROR: Text content is empty or too short!")
-            return
+            return False
 
         print(f"✅ Text found: {len(text)} characters. Proceeding...")
 
@@ -320,25 +322,134 @@ class AzureClient:
                 batch.append(doc)
 
                 if len(batch) >= upload_freq:
-                    print(f"   Uploading batch of {len(batch)}...")
-                    search_client.upload_documents(documents=batch)
+                    print(f"✅   Uploading batch of {len(batch)}...")
+                    #search_client.upload_documents(documents=batch)
                     batch.clear()
                     
             except Exception as e:
-                # MAKE THIS VISIBLE
                 print(f"❌ CRITICAL ERROR on chunk {i}: {str(e)}")
-                # Stop the loop so you see the error
                 break 
 
         if batch:
             print(f"   Uploading final batch of {len(batch)}...")
             try:
-                search_client.upload_documents(documents=batch)
+                # search_client.upload_documents(documents=batch)
+                print("✅ Final batch uploaded successfully!")
             except Exception as e:
                 print(f"❌ CRITICAL ERROR on final batch: {str(e)}")
 
         print(f"🏁 Finished processing.")
+        return True
+    
+        # Fetch, Extract, and Find Links
+    def process_url_and_find_links(self, current_url):
+        print(f"\n--- Processing: {current_url} ---")
         
+        # Download the HTML string
+        downloaded = trafilatura.fetch_url(current_url)
+        
+        if downloaded is None:
+            print(f"❌ Failed to download {current_url}")
+            return None, []
+
+        # A. Extract Main Text for RAG (Trafilatura's specialty)
+        # include_comments=False helps keep RAG indexes clean
+        main_text = trafilatura.extract(downloaded, include_comments=False, include_tables=True)
+
+        # B. Extract Links for Navigation (using lxml)
+        # parse the raw HTML to find navigation links
+        tree = html.fromstring(downloaded)
+        
+        # This automatically converts relative links (/about) to absolute (https://site.com/about)
+        tree.make_links_absolute(current_url)
+        
+        # Get all <a> tags
+        raw_links = tree.xpath('//a')
+        
+        viable_links = []
+        seen_urls = set()
+        
+        # Get current domain to avoid jumping to Instagram/Facebook/etc unintentionally
+        base_domain = urlparse(current_url).netloc
+
+        for link in raw_links:
+            href = link.get('href')
+            text = link.text_content().strip()
+            
+            if not href: continue
+            
+            # Filter: Skip javascript, mailto, and anchors
+            if href.startswith(('mailto:', 'javascript:', '#')): continue
+            
+            # Filter: Optional - Stay on the same domain
+            if urlparse(href).netloc != base_domain:
+                continue
+                
+            # Deduplicate
+            if href not in seen_urls and len(text) > 0:
+                seen_urls.add(href)
+                viable_links.append({'text': text, 'url': href})
+
+        return main_text, viable_links
+
+        # INTERACTIVE SELECTION LOOP
+    def search_url_loop(self, uploaded_url, index_name, chunk_size=800, upload_freq=50):
+        start_url = uploaded_url
+        queue = [start_url]
+        visited = set()
+
+        while queue:
+            current_url = queue.pop(0)
+            
+            if current_url in visited:
+                continue
+                
+            visited.add(current_url)
+
+            # Run the processor
+            extracted_text, links = self.process_url_and_find_links(current_url)
+            
+            if extracted_text:
+                print(f"Pushing {current_url} content to Azure...")
+                self.upload_text(extracted_text, index_name, chunk_size=chunk_size, upload_freq=upload_freq)
+            else:
+                print(f"No usable text found on {current_url}.")
+
+            if not links:
+                print("No viable links found.")
+                continue
+
+            # Display links to user
+            print(f"\nFound {len(links)} links on {current_url}:")
+            for i, link in enumerate(links):
+                # Print first 50 chars of text to keep it readable
+                print(f"[{i}] {link['text'][:50]}... -> {link['url']}")
+
+            print("\nWhich links to add to the queue?")
+            print("Type numbers (e.g., '1, 5, 10'), 'all', or press Enter to skip.")
+            
+            selection = input("Selection > ").strip().lower()
+
+            if selection == 'all':
+                for link in links:
+                    if link['url'] not in visited:
+                        queue.append(link['url'])
+                print(f"Added {len(links)} links to queue.")
+                
+            elif selection:
+                try:
+                    indices = [int(x.strip()) for x in selection.split(',')]
+                    count = 0
+                    for i in indices:
+                        if 0 <= i < len(links):
+                            target_url = links[i]['url']
+                            if target_url not in visited and target_url not in queue:
+                                queue.append(target_url)
+                                count += 1
+                    print(f"Added {count} links to queue.")
+                except ValueError:
+                    print("Invalid input. Moving on...")
+
     def get_model(self):
         return self.completions_model
     

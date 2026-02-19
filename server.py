@@ -29,9 +29,9 @@ class Server:
                 if file.filename.endswith('.pdf'):
                     self.azure_client.upload_pdf(file, index_name, chunk_size=chunk_size)
                 elif uploaded_url:
-                    text = self.azure_client.search_url(uploaded_url)
-                    if text:
-                        self.azure_client.upload_text(text, index_name, chunk_size=chunk_size)
+                    self.azure_client.search_url_loop(uploaded_url, index_name, chunk_size=chunk_size)
+                    # if text:
+                    #     self.azure_client.upload_text(text, index_name, chunk_size=chunk_size)
             return jsonify({"message": f"Index '{index_name}' created and files uploaded successfully"})
         except Exception as e:
             logging.error(f"Error creating index: {e}")
