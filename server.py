@@ -16,6 +16,7 @@ class Server:
         self.add_route("/delete_index", self.delete_index)
         self.add_route("/create_index", self.create_index)
         self.add_route("/show_create_index", self.show_create_index)
+        self.add_route("/edit_index_page", self.edit_index_page)
 
     def _return_message(self, message, success=True):
         if success:
@@ -51,6 +52,16 @@ class Server:
         except Exception as e:
             logging.error(f"Error creating index: {e}")
             return self._return_message(f"Error creating index: {e}", success=False)
+        
+    def edit_index_page(self):
+        index_name = request.form.get("index_name")
+        if not index_name:
+            return self._return_message("Index name is required to edit", success=False)
+        info = self.index_info_list.get_index_info(index_name)
+        if info is None:
+            return self._return_message(f"No information found for index '{index_name}'", success=False)
+        return render_template("edit_index.html", index=info)
+        
 
     def show_create_index(self):
         return render_template("create_index.html")
