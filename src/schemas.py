@@ -43,12 +43,19 @@ class IndexList:
         else:
             self.indexes.append(index_info)
         with open(INFO_PATH, "w") as f:
-            json.dump({"indexes": [idx.dict() for idx in self.indexes]}, f, indent=4)
+            json.dump({"indexes": [idx.model_dump() for idx in self.indexes]}, f, indent=4)
 
 
     def delete_index_info(self, index_name):
         self.indexes = [idx for idx in self.indexes if idx.name != index_name]
         with open(INFO_PATH, "w") as f:
-            json.dump({"indexes": [idx.dict() for idx in self.indexes]}, f, indent=4)
+            json.dump({"indexes": [idx.model_dump() for idx in self.indexes]}, f, indent=4)
+
+    def update_index_info(self, index_name, description=None):
+        idx = self.get_index_info(index_name)
+        if idx:
+            if description is not None:
+                idx.description = description[:100]  # Limit description to 100 chars
+            self.save_index_info(idx)
 
 

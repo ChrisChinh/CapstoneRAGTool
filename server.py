@@ -17,6 +17,7 @@ class Server:
         self.add_route("/create_index", self.create_index)
         self.add_route("/show_create_index", self.show_create_index)
         self.add_route("/edit_index_page", self.edit_index_page)
+        self.add_route("/edit_index", self.edit_index)
 
     def _return_message(self, message, success=True):
         if success:
@@ -53,6 +54,26 @@ class Server:
             logging.error(f"Error creating index: {e}")
             return self._return_message(f"Error creating index: {e}", success=False)
         
+    def edit_index(self):
+        form_data = request.form
+        index_name = form_data.get('name')
+        description = form_data.get('description', 'None provided')
+        files = request.files.getlist('files')
+
+        if not index_name:
+            return jsonify({"error": "Index name is required"}), 400
+
+        try:
+            self.index_info_list.update_index_info(index_name, description=description)
+            for file in files:
+                chunk_size = int(form_data.get('chunk_size', 800))
+                if file.filename.endswith('.pdf'):
+                    self.azure_client.upload_pdf(file, index_name, chunk_size=chunk_size)
+            return self._return_message(f"Index '{index_name}' updated successfully")
+        except Exception as e:
+            logging.error(f"Error editing index: {e}")
+            return self._return_message(f"Error editing index: {e}", success=False)
+
     def edit_index_page(self):
         index_name = request.form.get("index_name")
         if not index_name:
