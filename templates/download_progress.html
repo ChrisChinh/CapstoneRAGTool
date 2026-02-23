@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Processing Links...</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 40px auto;
+            padding: 20px;
+        }
+
+        /* 1. The background track of the progress bar */
+        .progress-container {
+            width: 100%;
+            background-color: #e0e0e0;
+            border-radius: 8px;
+            margin: 20px 0;
+            /* overflow:hidden keeps the inner bar neatly inside the rounded corners */
+            overflow: hidden; 
+        }
+
+        /* 2. The actual moving color bar */
+        .progress-bar {
+            height: 24px;
+            width: 0%; /* Starts at 0% */
+            background-color: #4caf50; /* A nice green */
+            /* The transition makes it slide smoothly instead of snapping abruptly */
+            transition: width 0.4s ease, background-color 0.4s ease; 
+        }
+    </style>
+</head>
+<body>
+
+    <h2>Adding URLs to the RAG Index</h2>
+    <h3 id="status-text">Starting up...</h3>
+    <p>Processed: <span id="completed-count">0</span> / <span id="total-count">?</span></p>
+
+    <div class="progress-container">
+        <div class="progress-bar" id="my-progress-bar"></div>
+    </div>
+
+    <script>
+        // Grab the unique task ID passed from your Flask route
+        const taskId = "{{ task_id }}";
+        
+        // Start asking the server for updates every 2 seconds (2000 ms)
+        const pollingInterval = setInterval(checkProgress, 2000);
+        
+        function checkProgress() {
+            // Fetch the JSON status dictionary from Flask
+            fetch(`/status/${taskId}`)
+                .then(response => response.json())
+                .then(data => {
+                    
+                    // 1. Update the text counters
+                    document.getElementById("completed-count").innerText = data.completed;
+                    document.getElementById("total-count").innerText = data.total;
+                    
+                    // 2. Calculate the percentage and stretch the CSS bar
+                    if (data.total > 0) {
+                        const percentage = (data.completed / data.total) * 100;
+                        document.getElementById("my-progress-bar").style.width = percentage + "%";
+                    }
+                    
+                    // 3. Handle completion and status messages
+                    if (data.status === "completed") {
+                        document.getElementById("status-text").innerText = "All Finished!";
+                        // Change color to blue when done to signal completion
+                        document.getElementById("my-progress-bar").style.backgroundColor = "#2196F3"; 
+                        // Stop asking the server for updates
+                        clearInterval(pollingInterval); 
+                    } else if (data.status === "running") {
+                        document.getElementById("status-text").innerText = "Scraping and Uploading to Azure...";
+                    }
+                })
+                .catch(error => console.error("Error fetching status:", error));
+        }
+    </script>
+
+</body>
+</html>

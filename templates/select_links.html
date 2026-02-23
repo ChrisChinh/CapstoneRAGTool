@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Select Links</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 40px auto; }
+        .link-item { margin-bottom: 10px; }
+        label { cursor: pointer; }
+    </style>
+</head>
+<body>
+
+    <h2>Links found on the page:</h2>
+    <p>Select the links you want to add to your RAG index.</p>
+
+    <form action="/process_selected_links" method="POST">
+        <input type="hidden" name="index_name" value="{{ index_name }}">
+        
+        {% for link in links %}
+            <div class="link-item">
+                <input type="checkbox" id="link_{{ loop.index }}" name="selected_links" value="{{ link['url'] }}">
+                
+                <label for="link_{{ loop.index }}">
+                    {{ link['text'] }} 
+                </label>
+            </div>
+        {% endfor %}
+
+        <br>
+        <button type="submit" style="padding: 10px 20px; background-color: #4caf50; color: white; border: none; cursor: pointer;">
+            Add Selected Links to RAG
+        </button>
+    </form>
+
+</body>
+</html>

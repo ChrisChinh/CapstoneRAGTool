@@ -323,7 +323,7 @@ class AzureClient:
 
                 if len(batch) >= upload_freq:
                     print(f"✅   Uploading batch of {len(batch)}...")
-                    #search_client.upload_documents(documents=batch)
+                    search_client.upload_documents(documents=batch)
                     batch.clear()
                     
             except Exception as e:
@@ -333,7 +333,7 @@ class AzureClient:
         if batch:
             print(f"   Uploading final batch of {len(batch)}...")
             try:
-                # search_client.upload_documents(documents=batch)
+                search_client.upload_documents(documents=batch)
                 print("✅ Final batch uploaded successfully!")
             except Exception as e:
                 print(f"❌ CRITICAL ERROR on final batch: {str(e)}")
