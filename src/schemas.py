@@ -1,4 +1,5 @@
 from pydantic import BaseModel
+from typing import Optional
 import json
 import os
 
@@ -11,6 +12,7 @@ class IndexInfo(BaseModel):
     created_at: str
     description: str
     status: str
+    documents: Optional[int] = None
 
 
 class IndexList:
@@ -57,5 +59,14 @@ class IndexList:
             if description is not None:
                 idx.description = description[:100]  # Limit description to 100 chars
             self.save_index_info(idx)
+        else:
+            new_idx = IndexInfo(
+                name=index_name,
+                dimensions=0,
+                created_at="N/A",
+                description=description[:100] if description else "No description provided",
+                status="active"
+            )
+            self.save_index_info(new_idx)
 
 

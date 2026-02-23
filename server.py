@@ -80,7 +80,12 @@ class Server:
             return self._return_message("Index name is required to edit", success=False)
         info = self.index_info_list.get_index_info(index_name)
         if info is None:
-            return self._return_message(f"No information found for index '{index_name}'", success=False)
+            info = IndexInfo(name=index_name, dimensions=0, created_at="N/A", description="No description provided", status="unknown")
+        names = self.azure_client.get_index_names()
+        for idx in names:
+            if idx['name'] == index_name:
+                info.documents = idx.get('document_count')
+                break
         return render_template("edit_index.html", index=info)
         
 
