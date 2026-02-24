@@ -234,6 +234,11 @@
                 <label for="files">Upload Files</label>
                 <input type="file" id="files" name="files" multiple accept=".pdf,.txt,.docx" placeholder="Choose files to initialize with">
             </div>
+
+            <div class="form-group">
+                <label for="url">Upload URL</label>
+                <input type="text" id="url" name="url" placeholder="Paste URL Here (optional)">
+            </div>
             
             <div class="button-group">
                 <button type="button" class="back-btn" onclick="window.location.href='{{ url_for('load_page') }}'">Back</button>
