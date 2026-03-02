@@ -2,3 +2,6 @@
 __pycache__/*
 .env
 __pycache__/*
+.venv
+*.nix
+*.lock

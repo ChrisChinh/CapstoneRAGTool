@@ -1,6 +1,7 @@
 from src.azure_client import AzureClient
 from flask import Flask, request, jsonify, render_template
 from src.schemas import IndexList, IndexInfo
+import argparse
 import datetime
 import logging
 import threading
@@ -187,11 +188,16 @@ class Server:
     def add_route(self, route, handler):
         self.app.add_url_rule(route, view_func=handler, methods=['POST', 'GET'])
 
-    def start(self):
-        self.app.run()
+    def start(self, host="127.0.0.1", port=5000):
+        self.app.run(host=host, port=port)
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--host", default="127.0.0.1")
+    parser.add_argument("--port", type=int, default=5000)
+    args = parser.parse_args()
+
     logging.basicConfig(level=logging.INFO)
     server = Server(config_path="config/config.yaml")
-    server.start()
+    server.start(host=args.host, port=args.port)

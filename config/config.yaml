@@ -8,10 +8,3 @@ embedding:
   api_version: "2024-02-01"
   model: "text-embedding-3-large"
 
-completions:
-  endpoint: "https://aifoundry0436939217.openai.azure.us/openai/deployments/gpt-4o-virginia-s/chat/completions?api-version=2025-01-01-preview"
-  api_key: AZURE_LLM_API_KEY_VIRGINIA
-  api_version: "2024-12-01-preview"
-  model: "gpt-4o"
-
-index_name: "ipp-documentation"

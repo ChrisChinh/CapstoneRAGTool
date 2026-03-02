@@ -17,12 +17,12 @@ import tiktoken
 from pypdf import PdfReader
 import logging
 import os
+import uuid
 import yaml
 # for website scraping
 import trafilatura
 from lxml import html
 from urllib.parse import urlparse
-import azure.functions as func
 
 # The schema for our search index
 def create_index_schema(search_dim=3072):
@@ -43,7 +43,6 @@ class ModelWrapper:
     Wrapper class to create Azure OpenAI models from YAML configuration dicts
     """
     def __init__(self, config_dict: dict):
-        self.model = config_dict.get("model")
         self.api_key = os.getenv(config_dict.get("api_key"))
         self.endpoint = config_dict.get("endpoint")
         self.api_version = config_dict.get("api_version")
@@ -74,10 +73,8 @@ class AzureClient:
         self.logger = logging.getLogger(__name__)
         self.logger.level = logging.DEBUG
 
-        # Init the embeddings and completions model
         self.embeddings_model = ModelWrapper(self.embedding_config).get_model()
         self.embedding_name = self.embedding_config.get("model")
-        self.completions_model = ModelWrapper(self.completion_config).get_model()
 
     def _load_config(self, path):
         """
@@ -87,15 +84,17 @@ class AzureClient:
         assert config is not None, "Config file is empty or invalid"
 
         self.endpoint = config.get("search_config", {}).get("endpoint", None)
-        self.api_key = config.get("search_config", {}).get("api_key", None)
-        self.api_key = os.getenv(self.api_key)
+        api_key_env = config.get("search_config", {}).get("api_key", None)
+        self.api_key = os.getenv(api_key_env) if api_key_env else None
 
         self.embedding_config = config.get("embedding", {})
-        self.completion_config = config.get("completions", {})
 
-        # self.api_key = os.getenv(self.api_key)
-
-        assert all([self.endpoint, self.api_key, self.embedding_config]), "Missing configuration values"
+        if not self.endpoint:
+            raise ValueError("Missing search_config.endpoint in config.yaml")
+        if not self.api_key:
+            raise ValueError(f"Environment variable '{api_key_env}' is not set")
+        if not self.embedding_config:
+            raise ValueError("Missing embedding section in config.yaml")
 
 
     def _index_exists(self, index_name):
@@ -208,12 +207,13 @@ class AzureClient:
         chunks = self._chunk_pdf(pdf, chunk_size=chunk_size)
 
         search_client = self._get_search_client(index_name)
+        batch_id = str(uuid.uuid4())
 
         batch = []
         for i, (page, text) in enumerate(chunks):
             emb = self._embed_text(text)
             doc = {
-                "id": f"doc-{i}",
+                "id": f"doc-{batch_id}-{i}",
                 "content": text,
                 "page": page,
                 "contentVector": emb
@@ -278,21 +278,22 @@ class AzureClient:
         print(f"✂️ Total chunks created: {len(chunks)}")
 
         search_client = self._get_search_client(index_name)
+        batch_id = str(uuid.uuid4())
         batch = []
 
         for i, chunk_content in enumerate(chunks):
             try:
                 # Debug: Print before embedding
-                # print(f"   Embedding chunk {i}...") 
+                # print(f"   Embedding chunk {i}...")
                 emb = self._embed_text(chunk_content)
-                
+
                 # CRITICAL DEBUG: Check dimensions
                 if i == 0:
                     print(f"📏 Embedding Dimension Detected: {len(emb)}")
                     # You can compare this to what your index expects here
 
                 doc = {
-                    "id": f"url-chunk-{i}", 
+                    "id": f"url-chunk-{batch_id}-{i}",
                     "content": chunk_content,
                     "page": 1, 
                     "contentVector": emb
@@ -318,8 +319,7 @@ class AzureClient:
 
         print(f"🏁 Finished processing.")
         return True
-    
-        # Fetch, Extract, and Find Links
+
     def process_url_and_find_links(self, current_url):
         print(f"\n--- Processing: {current_url} ---")
         
@@ -429,9 +429,6 @@ class AzureClient:
                     print("Invalid input. Moving on...")
 
 
-    def get_model(self):
-        return self.completions_model
-    
     def delete_index(self, index_name):
         """
         Deletes the specified index from the Azure Search service.
